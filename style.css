@@ -1,0 +1,28 @@
+body {
+    font-family: sans-serif;
+}
+#board {
+    margin: 20px 0;
+    display: inline-block;
+    border: 2px solid #333;
+}
+#board.computing {
+    filter: grayscale(100%);
+}
+.row {
+    display: flex;
+}
+.cell {
+    width: 50px;
+    height: 50px;
+    border: 1px solid #ccc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.cell.unavailable {
+    background: #777;
+}
+.cell.empty {
+    background: #fff;
+}

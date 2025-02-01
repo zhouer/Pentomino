@@ -3,39 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <title>Pentomino Puzzle Solver</title>
-    <style>
-        body {
-            font-family: sans-serif;
-        }
-        #board {
-            margin: 20px;
-            display: inline-block;
-            border: 2px solid #333;
-        }
-        .row {
-            display: flex;
-        }
-        .cell {
-            width: 50px;
-            height: 50px;
-            border: 1px solid #ccc;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .cell.unavailable {
-            background: #777;
-        }
-        .cell.empty {
-            background: #fff;
-        }
-        #controls {
-            margin: 10px;
-        }
-        button {
-            margin: 10px;
-        }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <h1>Pentomino Puzzle Solver</h1>
@@ -50,40 +18,27 @@
 
     // 預設棋盤
     // let defaultBoard = [
-    //     [0, 0, 0, 0, 0, 0, 0, 0],
-    //     [0, 0, 0, 0, 0, 0, 0, 0],
-    //     [0, 0, 0, 0, 0, 0, 0, 0],
-    //     [0, 0, 0, -1, -1, 0, 0, 0],
-    //     [0, 0, 0, -1, -1, 0, 0, 0],
-    //     [0, 0, 0, 0, 0, 0, 0, 0],
-    //     [0, 0, 0, 0, 0, 0, 0, 0],
-    //     [0, 0, 0, 0, 0, 0, 0, 0]
-    // ];
-    // let defaultBoard = [
     //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     // ];
     // let defaultBoard = [
-    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    // ];
-    // let defaultBoard = [
-    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     // ];
     let defaultBoard = [
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, -1, -1, 0, 0, 0],
+        [0, 0, 0, -1, -1, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0]
     ];
 
     // 預設拼片
@@ -110,7 +65,7 @@
         let board = initBoardData();
         renderBoard(board);
 
-        document.getElementById('board').style.opacity = "1";
+        document.getElementById('board').classList.remove("computing");
         document.getElementById('solveBtn').textContent = "Solve";
         console.log("reset");
     }
@@ -409,10 +364,11 @@
 
     // 開始求解
     function startSolve() {
-        document.getElementById('board').style.opacity = "0.5";
+        document.getElementById('board').classList.add("computing");
 
         setTimeout(() => {
             // 尋找下一個解
+            console.time("solve");
             let board = getNextSolutionFromStack();
             if (!board) {
                 console.log("沒有任何解！");
@@ -420,9 +376,10 @@
                 return;
             }
 
+            console.timeEnd("solve");
             console.log(`找到下一個解 ${board}`);
             renderBoard(board);
-            document.getElementById('board').style.opacity = "1";
+            document.getElementById('board').classList.remove("computing");
             document.getElementById('solveBtn').textContent = "Next";
         }, 0);
     }

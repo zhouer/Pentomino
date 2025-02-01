@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8" />
+    <title>Pentomino</title>
+    <style>
+        body {
+            font-family: sans-serif;
+        }
+        #board {
+            margin: 20px 0;
+            display: inline-block;
+            border: 2px solid #333;
+        }
+        .row {
+            display: flex;
+        }
+        .cell {
+            width: 50px;
+            height: 50px;
+            border: 1px solid #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        .cell.unavailable {
+            background: #999;
+        }
+        .cell.empty {
+            background: #fff;
+        }
+        /* 用不同顏色呈現不同拼片 */
+        .cell.color-1 { background: #ffcccc; }
+        .cell.color-2 { background: #ccffcc; }
+        .cell.color-3 { background: #ccccff; }
+        .cell.color-4 { background: #ffffcc; }
+        .cell.color-5 { background: #ffd9cc; }
+        .cell.color-6 { background: #d9ccff; }
+        .cell.color-7 { background: #ccffff; }
+        .cell.color-8 { background: #ffcce6; }
+        .cell.color-9 { background: #e6ffcc; }
+        .cell.color-10 { background: #ccd9ff; }
+        .cell.color-11 { background: #fff0cc; }
+        .cell.color-12 { background: #e6ccff; }
+        /* 如有擴充超過 12 片，可以再加更多 .color-n 樣式 */
+
+        #controls {
+            margin-top: 10px;
+        }
+        button {
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+<h1>Pentomino</h1>
+<div id="board"></div>
+<div id="controls">
+    <button id="startBtn">開始求解</button>
+    <button id="nextSolutionBtn" disabled>下一個解</button>
+    <button id="resetBtn">Reset</button>
+</div>
+
+<script>
+    /**
+     * =============================
+     * 1. 預設棋盤 (Board)
+     *    - 以 8x8 為例；中央 2x2 為 -1。
+     * =============================
+     */
+    let defaultBoardData = [
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, -1, -1, 0, 0, 0],
+        [0, 0, 0, -1, -1, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0]
+    ];
+
+    /**
+     * =============================
+     * 2. 預設拼片 (defaultPieces)
+     *    - 12 個 Pentomino，每個含有 coords 及 available 數量。
+     * =============================
+     */
+    let defaultPieces = [
+        { label: "F", coords: [[0,1],[1,0],[1,1],[2,1],[2,2]], available: 1 },
+        { label: "I", coords: [[0,0],[1,0],[2,0],[3,0],[4,0]], available: 1 },
+        { label: "L", coords: [[0,0],[0,1],[1,0],[2,0],[3,0]], available: 1 },
+        { label: "N", coords: [[0,0],[1,0],[1,1],[2,1],[3,1]], available: 1 },
+        { label: "P", coords: [[0,0],[1,0],[1,1],[2,0],[2,1]], available: 1 },
+        { label: "T", coords: [[0,1],[1,1],[2,0],[2,1],[2,2]], available: 1 },
+        { label: "U", coords: [[0,0],[0,1],[0,2],[1,0],[1,2]], available: 1 },
+        { label: "V", coords: [[0,0],[0,1],[0,2],[1,2],[2,2]], available: 1 },
+        { label: "W", coords: [[0,1],[0,2],[1,0],[1,1],[2,0]], available: 1 },
+        { label: "X", coords: [[0,1],[1,0],[1,1],[1,2],[2,1]], available: 1 },
+        { label: "Y", coords: [[0,1],[1,1],[2,0],[2,1],[3,1]], available: 1 },
+        { label: "Z", coords: [[0,1],[0,2],[1,1],[2,0],[2,1]], available: 1 }
+    ];
+
+    // 全域變數
+    let boardData = [];           // 棋盤陣列
+    let freeCells = 0;            // 剩餘可填格數
+    let allPieces = [];           // 包含所有旋轉/鏡射變形的拼片
+    let pieceAvailable = [];      // 對應 allPieces 的可用次數
+    let solutions = [];           // 所有解答
+    let currentSolutionIndex = 0; // 目前顯示解的索引
+
+    /**
+     * 初始化棋盤與可用拼片數
+     */
+    function initBoardData() {
+        // 複製預設棋盤
+        boardData = defaultBoardData.map(row => row.slice());
+        freeCells = 0;
+        for (let r = 0; r < boardData.length; r++) {
+            for (let c = 0; c < boardData[0].length; c++) {
+                if (boardData[r][c] === 0) {
+                    freeCells++;
+                }
+            }
+        }
+
+        // 由 defaultPieces 生成 allPieces (每塊的所有變形)
+        allPieces = generateAllPieceVariants(defaultPieces);
+
+        // pieceAvailable 根據 defaultPieces 的 available 建立
+        pieceAvailable = defaultPieces.map(p => p.available || 1);
+    }
+
+    /**
+     * 繪製棋盤於網頁
+     */
+    function renderBoard() {
+        const boardContainer = document.getElementById('board');
+        boardContainer.innerHTML = '';
+
+        for (let r = 0; r < boardData.length; r++) {
+            const rowDiv = document.createElement('div');
+            rowDiv.className = 'row';
+
+            for (let c = 0; c < boardData[0].length; c++) {
+                const cellDiv = document.createElement('div');
+                cellDiv.classList.add('cell');
+                let val = boardData[r][c];
+
+                if (val === -1) {
+                    cellDiv.classList.add('unavailable');
+                } else if (val === 0) {
+                    cellDiv.classList.add('empty');
+                } else {
+                    // 1~N => 同一個拼片
+                    cellDiv.classList.add('color-' + val);
+                    cellDiv.textContent = defaultPieces[val - 1].label; // 顯示拼片編號
+                }
+
+                rowDiv.appendChild(cellDiv);
+            }
+            boardContainer.appendChild(rowDiv);
+        }
+    }
+
+    /**
+     * 生成所有(旋轉+鏡射) 變形並去除重複
+     */
+    function generateAllPieceVariants(defaultPieces) {
+        // 輔助函數
+        function rotate90(coords) {
+            // (x, y) => (y, -x)
+            return coords.map(([x, y]) => [y, -x]);
+        }
+        function reflect(coords) {
+            // (x, y) => (x, -y) (左右鏡射)
+            return coords.map(([x, y]) => [x, -y]);
+        }
+        function normalize(coords) {
+            // 全體往左上移動，最小 x, y 變 0
+            let minX = Math.min(...coords.map(p => p[0]));
+            let minY = Math.min(...coords.map(p => p[1]));
+            return coords
+                .map(([x, y]) => [x - minX, y - minY])
+                .sort((a, b) => (a[0] === b[0] ? a[1] - b[1] : a[0] - b[0]));
+        }
+
+        function getAllTransforms(coords) {
+            let resultSet = new Set(); // 用來判斷重複
+            let resultArray = [];
+            let current = coords;
+
+            for (let r = 0; r < 4; r++) {
+                // normalize 原圖 (旋轉 r 次)
+                let norm = normalize(current);
+                let key = JSON.stringify(norm);
+                if (!resultSet.has(key)) {
+                    resultSet.add(key);
+                    resultArray.push(norm);
+                }
+                // normalize 鏡射
+                let mirror = normalize(reflect(current));
+                let key2 = JSON.stringify(mirror);
+                if (!resultSet.has(key2)) {
+                    resultSet.add(key2);
+                    resultArray.push(mirror);
+                }
+                // 再旋轉一次
+                current = rotate90(current);
+            }
+            return resultArray;
+        }
+
+        // 幫每個 piece 生成 variants
+        return defaultPieces.map(piece => {
+            let variants = getAllTransforms(piece.coords);
+            return {
+                label: piece.label,
+                variants
+            };
+        });
+    }
+
+    /**
+     * DFS 主邏輯
+     */
+    function solveAllSolutions() {
+        if (freeCells === 0) {
+            // 已填滿 => 放入解答
+            let solution = boardData.map(row => row.slice());
+            solutions.push(solution);
+            console.log(`找到第 ${solutions.length} 個解`);
+            return; // 回溯繼續找其他解
+        }
+
+        // 找最少可放方式的空格
+        let cellInfo = findCellWithFewestPlacements();
+        if (!cellInfo) {
+            return; // 此路不通
+        }
+
+        let { row, col, placements } = cellInfo;
+        for (let p of placements) {
+            let { pieceIndex, variantIndex, offsetR, offsetC } = p;
+            let shape = allPieces[pieceIndex].variants[variantIndex];
+
+            // 放置
+            placePiece(pieceIndex, shape, offsetR, offsetC);
+            // 遞迴
+            solveAllSolutions();
+            // 移除
+            removePiece(pieceIndex, shape, offsetR, offsetC);
+        }
+    }
+
+    /**
+     * 找到「可放方法最少」的空格
+     */
+    function findCellWithFewestPlacements() {
+        let rows = boardData.length;
+        let cols = boardData[0].length;
+
+        let bestCell = null;
+        let bestPlacements = [];
+        let minCount = Infinity;
+
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                if (boardData[r][c] === 0) {
+                    let possible = getPossiblePlacements(r, c);
+                    if (possible.length === 0) {
+                        // 此空格無法放任何拼片
+                        return null;
+                    } else if (possible.length < minCount) {
+                        minCount = possible.length;
+                        bestCell = { row: r, col: c };
+                        bestPlacements = possible;
+                    }
+                }
+            }
+        }
+
+        if (!bestCell) {
+            return null;
+        }
+
+        return {
+            row: bestCell.row,
+            col: bestCell.col,
+            placements: bestPlacements
+        };
+    }
+
+    /**
+     * 該空格 (row,col) 對應到哪一些「pieceIndex + 變形 + offset」可放
+     */
+    function getPossiblePlacements(row, col) {
+        let placements = [];
+
+        for (let pIndex = 0; pIndex < allPieces.length; pIndex++) {
+            // 只考慮尚有可用次數的拼片
+            if (pieceAvailable[pIndex] > 0) {
+                let variants = allPieces[pIndex].variants;
+                for (let vIndex = 0; vIndex < variants.length; vIndex++) {
+                    let shape = variants[vIndex];
+                    // shape 裏的每個點都可能對應到 (row, col)
+                    for (let i = 0; i < shape.length; i++) {
+                        let [baseX, baseY] = shape[i];
+                        let offsetR = row - baseX;
+                        let offsetC = col - baseY;
+                        if (canPlaceShape(shape, offsetR, offsetC)) {
+                            placements.push({
+                                pieceIndex: pIndex,
+                                variantIndex: vIndex,
+                                offsetR,
+                                offsetC
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        return placements;
+    }
+
+    /**
+     * 檢查該 shape 是否可在 offset 下完全放入
+     */
+    function canPlaceShape(shape, offsetR, offsetC) {
+        let rows = boardData.length;
+        let cols = boardData[0].length;
+
+        for (let [x, y] of shape) {
+            let r = x + offsetR;
+            let c = y + offsetC;
+
+            if (r < 0 || r >= rows || c < 0 || c >= cols) {
+                return false;
+            }
+            if (boardData[r][c] !== 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 放置一塊拼片
+     */
+    function placePiece(pieceIndex, shape, offsetR, offsetC) {
+        for (let [x, y] of shape) {
+            let r = x + offsetR;
+            let c = y + offsetC;
+            boardData[r][c] = pieceIndex + 1; // 1-based
+            freeCells--;
+        }
+        pieceAvailable[pieceIndex]--;
+    }
+
+    /**
+     * 移除一塊拼片
+     */
+    function removePiece(pieceIndex, shape, offsetR, offsetC) {
+        for (let [x, y] of shape) {
+            let r = x + offsetR;
+            let c = y + offsetC;
+            boardData[r][c] = 0;
+            freeCells++;
+        }
+        pieceAvailable[pieceIndex]++;
+    }
+
+    /**
+     * 開始求解
+     */
+    function startSolve() {
+        console.log("開始求解...");
+        solutions = [];
+        currentSolutionIndex = 0;
+
+        solveAllSolutions();
+
+        if (solutions.length === 0) {
+            console.log("沒有任何解！");
+            alert("沒有任何解！");
+        } else {
+            console.log("求解完畢，共找到 " + solutions.length + " 個解。");
+            currentSolutionIndex = 0;
+            showSolution(currentSolutionIndex);
+            document.getElementById('nextSolutionBtn').disabled = false;
+        }
+    }
+
+    /**
+     * 顯示 solutions 裏的某個解
+     */
+    function showSolution(index) {
+        if (index < 0 || index >= solutions.length) return;
+        boardData = solutions[index].map(row => row.slice());
+        renderBoard();
+        console.log(`顯示第 ${index + 1} 個解: ${boardData}`);
+    }
+
+    /**
+     * 下一個解
+     */
+    function nextSolution() {
+        if (solutions.length === 0) return;
+        currentSolutionIndex = (currentSolutionIndex + 1) % solutions.length;
+        showSolution(currentSolutionIndex);
+    }
+
+    /**
+     * Reset
+     */
+    function resetBoard() {
+        initBoardData();
+        renderBoard();
+        solutions = [];
+        currentSolutionIndex = 0;
+        document.getElementById('nextSolutionBtn').disabled = true;
+        console.log("棋盤已重置。");
+    }
+
+    // 初始化
+    initBoardData();
+    renderBoard();
+    console.log("棋盤初始化完成。");
+
+    // 綁定按鈕事件
+    document.getElementById('startBtn').addEventListener('click', () => {
+        startSolve();
+    });
+    document.getElementById('nextSolutionBtn').addEventListener('click', () => {
+        nextSolution();
+    });
+    document.getElementById('resetBtn').addEventListener('click', () => {
+        resetBoard();
+    });
+</script>
+</body>
+</html>

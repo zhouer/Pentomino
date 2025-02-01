@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Pentomino Puzzle Solver</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<h1>Pentomino Puzzle Solver</h1>
+<div id="board"></div>
+<div id="controls">
+    <button id="nextStepBtn">Next step</button>
+    <button id="nextSolutionBtn">Next solution</button>
+    <button id="resetBtn">Reset</button>
+</div>
+
+<script>
+    'use strict';
+
+    // -----------------------------
+    // 全域基本資料設定
+    // -----------------------------
+    // let defaultBoard = [
+    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    // ];
+    // let defaultBoard = [
+    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    //     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    // ];
+    let defaultBoard = [
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, -1, -1, 0, 0, 0],
+        [0, 0, 0, -1, -1, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0]
+    ];
+
+    // 預設拼片資料，每個拼片包含：座標、可用數量、以及 hsla 顏色（色相每次加 30°）
+    let defaultPieces = [
+        { label: "F", coords: [[0, 1], [1, 0], [1, 1], [2, 1], [2, 2]], available: 1, color: "hsla(0, 90%, 80%, 1)" },
+        { label: "I", coords: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]], available: 1, color: "hsla(30, 90%, 80%, 1)" },
+        { label: "L", coords: [[0, 0], [0, 1], [1, 0], [2, 0], [3, 0]], available: 1, color: "hsla(60, 90%, 80%, 1)" },
+        { label: "N", coords: [[0, 0], [1, 0], [1, 1], [2, 1], [3, 1]], available: 1, color: "hsla(90, 90%, 80%, 1)" },
+        { label: "P", coords: [[0, 0], [1, 0], [1, 1], [2, 0], [2, 1]], available: 1, color: "hsla(120, 90%, 80%, 1)" },
+        { label: "T", coords: [[0, 1], [1, 1], [2, 0], [2, 1], [2, 2]], available: 1, color: "hsla(150, 90%, 80%, 1)" },
+        { label: "U", coords: [[0, 0], [0, 1], [0, 2], [1, 0], [1, 2]], available: 1, color: "hsla(180, 90%, 80%, 1)" },
+        { label: "V", coords: [[0, 0], [0, 1], [0, 2], [1, 2], [2, 2]], available: 1, color: "hsla(210, 90%, 80%, 1)" },
+        { label: "W", coords: [[0, 1], [0, 2], [1, 0], [1, 1], [2, 0]], available: 1, color: "hsla(240, 90%, 80%, 1)" },
+        { label: "X", coords: [[0, 1], [1, 0], [1, 1], [1, 2], [2, 1]], available: 1, color: "hsla(270, 90%, 80%, 1)" },
+        { label: "Y", coords: [[0, 1], [1, 1], [2, 0], [2, 1], [3, 1]], available: 1, color: "hsla(300, 90%, 80%, 1)" },
+        { label: "Z", coords: [[0, 1], [0, 2], [1, 1], [2, 0], [2, 1]], available: 1, color: "hsla(330, 90%, 80%, 1)" }
+    ];
+
+    // 將所有拼片的旋轉與鏡射變形只計算一次，供後續 DFS 使用
+    let allPieces = generateAllPieceVariants(defaultPieces);
+
+    // -----------------------------
+    // 全域變數：棋盤狀態與 DFS 搜索用的 stack
+    // -----------------------------
+    let boardData = [];         // 畫面上目前顯示的棋盤（2D 陣列）
+    let freeCells = 0;          // 尚未填入拼片的空白格數
+    let pieceAvailable = [];    // 各拼片剩餘可用數量
+
+    // dfsStack 儲存每個 DFS 決策的 frame
+    // 每個 frame 格式：
+    // {
+    //   state: { boardData, freeCells, pieceAvailable },
+    //   bestCell: { row, col },
+    //   placements: [ { pieceIndex, variantIndex, offsetR, offsetC }, ... ],
+    //   nextPlacementIndex: 下一個待嘗試方案的索引
+    // }
+    let dfsStack = null;
+
+    // -----------------------------
+    // 狀態複製相關函式
+    // -----------------------------
+    // 複製 2D 陣列（棋盤）
+    function deepCopyBoard(board) {
+        let newBoard = [];
+        for (let i = 0; i < board.length; i++) {
+            newBoard.push(board[i].slice());
+        }
+        return newBoard;
+    }
+
+    // 複製 state 物件：{ boardData, freeCells, pieceAvailable }
+    function cloneState(state) {
+        return {
+            boardData: deepCopyBoard(state.boardData),
+            freeCells: state.freeCells,
+            pieceAvailable: state.pieceAvailable.slice()
+        };
+    }
+
+    // -----------------------------
+    // 初始化棋盤與拼片數量
+    // -----------------------------
+    function initBoardData() {
+        boardData = deepCopyBoard(defaultBoard);
+        freeCells = 0;
+        for (let r = 0; r < boardData.length; r++) {
+            for (let c = 0; c < boardData[0].length; c++) {
+                if (boardData[r][c] === 0) {
+                    freeCells++;
+                }
+            }
+        }
+        // 初始化各拼片的可用數量
+        pieceAvailable = defaultPieces.map(function(piece) {
+            return piece.available || 1;
+        });
+    }
+
+    // 取得初始狀態
+    function getInitialState() {
+        return {
+            boardData: deepCopyBoard(boardData),
+            freeCells: freeCells,
+            pieceAvailable: pieceAvailable.slice()
+        };
+    }
+
+    // -----------------------------
+    // 畫面渲染：將 boardData 渲染到頁面上
+    // -----------------------------
+    function renderBoard() {
+        let boardContainer = document.getElementById("board");
+        boardContainer.innerHTML = "";
+        for (let r = 0; r < boardData.length; r++) {
+            let rowDiv = document.createElement("div");
+            rowDiv.className = "row";
+            for (let c = 0; c < boardData[0].length; c++) {
+                let cellDiv = document.createElement("div");
+                cellDiv.classList.add("cell");
+                let cellValue = boardData[r][c];
+                if (cellValue === -1) {
+                    cellDiv.classList.add("unavailable");
+                } else if (cellValue === 0) {
+                    cellDiv.classList.add("empty");
+                } else {
+                    let piece = defaultPieces[cellValue - 1];
+                    cellDiv.textContent = piece.label;
+                    cellDiv.style.background = piece.color;
+                }
+                rowDiv.appendChild(cellDiv);
+            }
+            boardContainer.appendChild(rowDiv);
+        }
+    }
+
+    // -----------------------------
+    // 拼片變形：計算每個拼片所有旋轉及鏡射變形（避免重複）
+    // -----------------------------
+    function generateAllPieceVariants(pieces) {
+        // 旋轉 90 度： (x, y) -> (y, -x)
+        function rotate90(coords) {
+            return coords.map(function(point) {
+                let x = point[0], y = point[1];
+                return [y, -x];
+            });
+        }
+        // 鏡射： (x, y) -> (x, -y)
+        function reflect(coords) {
+            return coords.map(function(point) {
+                let x = point[0], y = point[1];
+                return [x, -y];
+            });
+        }
+        // 平移所有點，使得最小 x 與 y 為 0，再依序排序
+        function normalize(coords) {
+            let xs = coords.map(function(point) { return point[0]; });
+            let ys = coords.map(function(point) { return point[1]; });
+            let minX = Math.min.apply(null, xs);
+            let minY = Math.min.apply(null, ys);
+            let normalized = coords.map(function(point) {
+                return [point[0] - minX, point[1] - minY];
+            });
+            normalized.sort(function(a, b) {
+                if (a[0] === b[0]) {
+                    return a[1] - b[1];
+                } else {
+                    return a[0] - b[0];
+                }
+            });
+            return normalized;
+        }
+        // 取得所有旋轉與鏡射變形，並用 Set 避免重複
+        function getAllTransforms(coords) {
+            let resultSet = new Set();
+            let resultArray = [];
+            let currentCoords = coords;
+            for (let i = 0; i < 4; i++) {
+                let norm = normalize(currentCoords);
+                let key = JSON.stringify(norm);
+                if (!resultSet.has(key)) {
+                    resultSet.add(key);
+                    resultArray.push(norm);
+                }
+                let mirror = normalize(reflect(currentCoords));
+                let keyMirror = JSON.stringify(mirror);
+                if (!resultSet.has(keyMirror)) {
+                    resultSet.add(keyMirror);
+                    resultArray.push(mirror);
+                }
+                currentCoords = rotate90(currentCoords);
+            }
+            return resultArray;
+        }
+        return pieces.map(function(piece) {
+            return {
+                label: piece.label,
+                variants: getAllTransforms(piece.coords)
+            };
+        });
+    }
+
+    // -----------------------------
+    // DFS 相關函式：利用顯式 stack 模擬回溯
+    // -----------------------------
+
+    // 在給定 state 下，找出空白格中放置可能性最少的那一格
+    // 若該空白格無任何可行方案，則回傳 null
+    function findCellWithFewestPlacements(state) {
+        let bestCell = null;
+        let bestPlacements = [];
+        let minCount = Infinity;
+        let board = state.boardData;
+        for (let r = 0; r < board.length; r++) {
+            for (let c = 0; c < board[0].length; c++) {
+                if (board[r][c] === 0) {
+                    let placements = getPossiblePlacements(state, r, c);
+                    if (placements.length === 0) {
+                        return null;
+                    }
+                    if (placements.length < minCount) {
+                        minCount = placements.length;
+                        bestCell = { row: r, col: c };
+                        bestPlacements = placements;
+                    }
+                }
+            }
+        }
+        if (bestCell === null) {
+            return null;
+        }
+        return {
+            row: bestCell.row,
+            col: bestCell.col,
+            placements: bestPlacements
+        };
+    }
+
+    // 取得指定 state 下，(row, col) 空白格的所有可行放置方案
+    // 每個方案格式： { pieceIndex, variantIndex, offsetR, offsetC }
+    function getPossiblePlacements(state, row, col) {
+        let placements = [];
+        for (let pieceIndex = 0; pieceIndex < allPieces.length; pieceIndex++) {
+            if (state.pieceAvailable[pieceIndex] > 0) {
+                let variants = allPieces[pieceIndex].variants;
+                for (let variantIndex = 0; variantIndex < variants.length; variantIndex++) {
+                    let shape = variants[variantIndex];
+                    for (let i = 0; i < shape.length; i++) {
+                        let baseX = shape[i][0];
+                        let baseY = shape[i][1];
+                        let offsetR = row - baseX;
+                        let offsetC = col - baseY;
+                        if (canPlaceShape(state, shape, offsetR, offsetC)) {
+                            placements.push({
+                                pieceIndex: pieceIndex,
+                                variantIndex: variantIndex,
+                                offsetR: offsetR,
+                                offsetC: offsetC
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        return placements;
+    }
+
+    // 檢查在 state 下，使用某變形以 (offsetR, offsetC) 是否可以放置
+    function canPlaceShape(state, shape, offsetR, offsetC) {
+        let board = state.boardData;
+        let rows = board.length;
+        let cols = board[0].length;
+        for (let i = 0; i < shape.length; i++) {
+            let x = shape[i][0];
+            let y = shape[i][1];
+            let r = x + offsetR;
+            let c = y + offsetC;
+            if (r < 0 || r >= rows || c < 0 || c >= cols) {
+                return false;
+            }
+            if (board[r][c] !== 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // 建立 DFS frame：在當前 state 下選擇最合適的空白格與所有可行放置方案
+    function createFrame(state) {
+        let cellInfo = findCellWithFewestPlacements(state);
+        if (cellInfo === null) {
+            return null;
+        }
+        return {
+            state: state,
+            bestCell: { row: cellInfo.row, col: cellInfo.col },
+            placements: cellInfo.placements,
+            nextPlacementIndex: 0
+        };
+    }
+
+    // 根據指定 state 與放置方案，產生新 state
+    // 更新 boardData（填入拼片）、freeCells 與 pieceAvailable
+    function applyPlacement(state, placement) {
+        let newState = cloneState(state);
+        let board = newState.boardData;
+        let shape = allPieces[placement.pieceIndex].variants[placement.variantIndex];
+        for (let i = 0; i < shape.length; i++) {
+            let x = shape[i][0];
+            let y = shape[i][1];
+            let r = x + placement.offsetR;
+            let c = y + placement.offsetC;
+            board[r][c] = placement.pieceIndex + 1;  // 1-based 編號
+        }
+        newState.freeCells -= shape.length;
+        newState.pieceAvailable[placement.pieceIndex]--;
+        return newState;
+    }
+
+    // ----------------------------------------------
+    // DFS 核心邏輯：以顯式 stack 模擬回溯
+    // ----------------------------------------------
+    // 此函式執行一次 DFS 步驟，返回結果物件：
+    // { done: boolean, solution: state 或 null, state: 若非完整解則為當前 state }
+    function dfsStep() {
+        // 尚未初始化 DFS stack 時，先建立初始 frame
+        if (dfsStack === null) {
+            dfsStack = [];
+            let initialState = getInitialState();
+            let initialFrame = createFrame(initialState);
+            if (initialFrame === null) {
+                return { done: true, solution: null };
+            }
+            dfsStack.push(initialFrame);
+        }
+        while (dfsStack.length > 0) {
+            let currentFrame = dfsStack[dfsStack.length - 1];
+            // 若當前 frame 中所有方案皆已嘗試，則回溯
+            if (currentFrame.nextPlacementIndex >= currentFrame.placements.length) {
+                dfsStack.pop();
+                continue;
+            }
+            // 取得下一個放置方案
+            let placement = currentFrame.placements[currentFrame.nextPlacementIndex];
+            currentFrame.nextPlacementIndex++;
+            // 產生新的 state
+            let newState = applyPlacement(currentFrame.state, placement);
+            // 若所有空白皆填滿，表示找到完整解
+            if (newState.freeCells === 0) {
+                return { done: false, solution: newState };
+            }
+            // 建立新 frame，若該 state 下無任何可行方案，則繼續嘗試其他方案
+            let newFrame = createFrame(newState);
+            if (newFrame === null) {
+                continue;
+            }
+            dfsStack.push(newFrame);
+            // 此步未完成完整解，但更新 state 可供顯示
+            return { done: false, solution: null, state: newState };
+        }
+        // DFS stack 為空，表示所有路徑皆走完
+        return { done: true, solution: null };
+    }
+
+    // ----------------------------------------------
+    // 按鈕功能：Next step 與 Next solution
+    // ----------------------------------------------
+
+    // Next step：執行單一步 DFS 搜索，顯示當前狀態或完整解
+    function nextStep() {
+        let boardElement = document.getElementById("board");
+        boardElement.classList.add("computing");
+        setTimeout(function() {
+            let result = dfsStep();
+            if (result.done) {
+                boardElement.classList.remove("computing");
+                alert("沒有更多解了！");
+                return;
+            }
+            if (result.solution !== null) {
+                // 找到完整解答，更新全域狀態並顯示
+                boardData = result.solution.boardData;
+                freeCells = result.solution.freeCells;
+                pieceAvailable = result.solution.pieceAvailable;
+                renderBoard();
+                boardElement.classList.remove("computing");
+                console.log("找到一組完整解答！");
+                return;
+            }
+            if (result.state !== undefined) {
+                // 尚未完成完整解，僅更新局部 state 並渲染
+                boardData = result.state.boardData;
+                freeCells = result.state.freeCells;
+                pieceAvailable = result.state.pieceAvailable;
+                renderBoard();
+                boardElement.classList.remove("computing");
+                console.log("一步 DFS 搜索完成");
+                return;
+            }
+        }, 0);
+    }
+
+    // Next solution：持續執行 DFS，直到找到完整解答後再更新畫面
+    function nextSolution() {
+        let boardElement = document.getElementById("board");
+        boardElement.classList.add("computing");
+        setTimeout(function() {
+            let result;
+            console.time("solve");
+            // 連續執行 DFS 步驟，直至找到完整解答
+            while (true) {
+                result = dfsStep();
+                if (result.done) {
+                    boardElement.classList.remove("computing");
+                    alert("沒有更多解了！");
+                    return;
+                }
+                if (result.solution !== null) {
+                    // 找到完整解答，更新全域狀態並渲染畫面
+                    console.timeEnd("solve");
+                    boardData = result.solution.boardData;
+                    freeCells = result.solution.freeCells;
+                    pieceAvailable = result.solution.pieceAvailable;
+                    renderBoard();
+                    boardElement.classList.remove("computing");
+                    console.log("找到一組完整解答！");
+                    return;
+                }
+                // 若 result.state 非完整解，則繼續執行下一步
+            }
+        }, 0);
+    }
+
+    // ----------------------------------------------
+    // Reset：重置棋盤與 DFS stack
+    // ----------------------------------------------
+    function resetBoard() {
+        initBoardData();
+        renderBoard();
+        dfsStack = null;
+        console.log("棋盤已重置");
+    }
+
+    // ----------------------------------------------
+    // 初始化：建立棋盤並綁定按鈕事件
+    // ----------------------------------------------
+    initBoardData();
+    renderBoard();
+    console.log("棋盤初始化完成");
+
+    document.getElementById("nextStepBtn").addEventListener("click", nextStep);
+    document.getElementById("nextSolutionBtn").addEventListener("click", nextSolution);
+    document.getElementById("resetBtn").addEventListener("click", resetBoard);
+</script>
+</body>
+</html>
